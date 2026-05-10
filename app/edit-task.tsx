@@ -42,6 +42,7 @@ export default function EditTask() {
     freq: task?.freq ?? "daily",
     dows: task?.dows ?? [],
     reminderTime: task?.reminderTime ?? null,
+    durationMinutes: task?.durationMinutes ?? 15,
     plant: null, // hidden in edit mode
   }));
   const [submitting, setSubmitting] = React.useState(false);
@@ -64,6 +65,7 @@ export default function EditTask() {
         freq: state.freq,
         dows: state.freq === "dow" ? state.dows : [],
         reminderTime: state.reminderTime,
+        durationMinutes: state.durationMinutes,
       });
       upsertTask(updated);
       if (updated.reminderTime) {

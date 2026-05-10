@@ -70,10 +70,24 @@ export default function TasksScreen() {
   const palette = PIXEL_PALETTES[profile?.paletteKey ?? "terracotta"];
   const tz = profile?.tz ?? "UTC";
 
+  // Sort each group by reminder time (earliest → latest). Tasks without a
+  // reminder fall to the bottom in their original relative order.
   const groups: { id: Frequency; label: string; items: Task[] }[] = (
     ["daily", "dow", "weekly", "monthly"] as Frequency[]
   )
-    .map((id) => ({ id, label: FREQ_LABEL[id], items: tasks.filter((t) => t.freq === id) }))
+    .map((id) => ({
+      id,
+      label: FREQ_LABEL[id],
+      items: tasks
+        .filter((t) => t.freq === id)
+        .slice()
+        .sort((a, b) => {
+          if (!a.reminderTime && !b.reminderTime) return 0;
+          if (!a.reminderTime) return 1;
+          if (!b.reminderTime) return -1;
+          return a.reminderTime.localeCompare(b.reminderTime);
+        }),
+    }))
     .filter((g) => g.items.length > 0);
 
   const dailyTasks = tasks.filter((t) => t.freq === "daily");
@@ -217,7 +231,8 @@ export default function TasksScreen() {
                         { color: palette.inkSoft, fontFamily: FONTS.body },
                       ]}
                     >
-                      🔥 {task.streak}d   +{FREQ_COIN[task.freq]}🪙   +{FREQ_XP[task.freq]} XP
+                      🔥 {task.streak}d   +{FREQ_COIN[task.freq]}🪙   +{FREQ_XP[task.freq]} XP   ⏱ {formatDuration(task.durationMinutes)}
+                      {task.reminderTime ? `   🔔 ${formatTime(task.reminderTime)}` : ""}
                     </Text>
                   </View>
                   {linked && (
@@ -242,6 +257,19 @@ export default function TasksScreen() {
       </ScrollView>
     </View>
   );
+}
+
+function formatDuration(mins: number): string {
+  if (mins >= 60 && mins % 60 === 0) return `${mins / 60}h`;
+  if (mins >= 60) return `${Math.floor(mins / 60)}h${mins % 60}m`;
+  return `${mins}m`;
+}
+
+function formatTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 const styles = StyleSheet.create({

@@ -33,6 +33,7 @@ export type Task = {
   freq: Frequency;
   dows: number[]; // 1=Mon..7=Sun
   reminderTime: string | null; // 'HH:MM'
+  durationMinutes: number;
   streak: number;
   lastCompletedAt: string | null;
   plantId: string | null;

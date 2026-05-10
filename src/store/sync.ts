@@ -7,6 +7,7 @@
 import * as React from "react";
 import type { Session } from "@supabase/supabase-js";
 
+import { listDecorOwned } from "@/data/decor";
 import { listInventory } from "@/data/inventory";
 import { listPlants } from "@/data/plants";
 import { fetchProfile } from "@/data/profile";
@@ -24,6 +25,7 @@ const dbToTask = (t: any): Task => ({
   freq: t.freq,
   dows: t.dows ?? [],
   reminderTime: t.reminder_time ?? null,
+  durationMinutes: t.duration_minutes ?? 15,
   streak: t.streak ?? 0,
   lastCompletedAt: t.last_completed_at ?? null,
   plantId: t.plant_id ?? null,
@@ -72,6 +74,7 @@ export function useSyncStore(session: Session | null): void {
       s.setTasks([]);
       s.setPlants([]);
       s.setInventory([]);
+      s.setDecorOwned([]);
       return;
     }
 
@@ -80,11 +83,12 @@ export function useSyncStore(session: Session | null): void {
 
     (async () => {
       try {
-        const [profile, tasks, plants, inventory] = await Promise.all([
+        const [profile, tasks, plants, inventory, decor] = await Promise.all([
           fetchProfile(userId),
           listTasks(userId),
           listPlants(userId),
           listInventory(userId),
+          listDecorOwned(userId),
         ]);
         if (cancelled) return;
         const s = useGameStore.getState();
@@ -92,6 +96,9 @@ export function useSyncStore(session: Session | null): void {
         s.setTasks(tasks);
         s.setPlants(plants);
         s.setInventory(inventory);
+        s.setDecorOwned(
+          decor.map((row) => ({ id: row.decorId, slotIndex: row.slotIndex })),
+        );
       } catch (e) {
         console.warn("[sync] initial fetch failed", e);
       }

@@ -32,6 +32,9 @@ type Props = {
   slotH: number;
   /** Sprite scale relative to flowers-v2's 28-px-wide canvas. */
   plantScale: number;
+  /** When true, empty cells get a "+" affordance and onTapEmpty fires.
+   *  When false, empty cells render as faint dotted outlines and don't react. */
+  editMode: boolean;
   onTapPlant: (plant: PlantRow) => void;
   onMovePlant: (plantId: string, col: number, row: number) => void;
   onTapEmpty?: () => void;
@@ -45,6 +48,7 @@ export function GreenhouseGrid({
   slotW,
   slotH,
   plantScale,
+  editMode,
   onTapPlant,
   onMovePlant,
   onTapEmpty,
@@ -68,10 +72,12 @@ export function GreenhouseGrid({
         const row = Math.floor(i / cols);
         const isHover = dragId && hoverSlot?.col === col && hoverSlot?.row === row;
         const empty = !occupied.has(`${col},${row}`);
+        const showAffordance = empty && editMode;
         return (
           <Pressable
             key={i}
-            onPress={empty && onTapEmpty ? onTapEmpty : undefined}
+            onPress={showAffordance && onTapEmpty ? onTapEmpty : undefined}
+            disabled={!showAffordance}
             style={[
               styles.slot,
               {
@@ -79,16 +85,17 @@ export function GreenhouseGrid({
                 top: row * slotH,
                 width: slotW - 2,
                 height: slotH - 2,
-                borderColor: empty ? palette.line + "80" : "transparent",
+                borderColor: empty ? palette.line + (editMode ? "80" : "33") : "transparent",
+                borderStyle: showAffordance ? "dashed" : "dotted",
                 backgroundColor: isHover
                   ? palette.coin + "55"
-                  : empty
+                  : showAffordance
                     ? palette.bgPanel + "33"
                     : "transparent",
               },
             ]}
           >
-            {empty && (
+            {showAffordance && (
               <Text
                 style={{
                   fontSize: Math.round(slotW * 0.36),

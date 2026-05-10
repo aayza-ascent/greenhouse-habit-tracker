@@ -45,6 +45,7 @@ export default function Onboarding() {
     freq: "daily",
     dows: [1, 3, 5],
     reminderTime: "09:00",
+    durationMinutes: 5,
     plant: STARTER_TYPES[0] ?? "tulip",
   });
   const [submitting, setSubmitting] = React.useState(false);
@@ -74,6 +75,7 @@ export default function Onboarding() {
         freq: formState.freq,
         dows: formState.freq === "dow" ? formState.dows : [],
         reminderTime: formState.reminderTime,
+        durationMinutes: formState.durationMinutes,
         plantType: picked,
       });
       if (formState.reminderTime) {

@@ -5,10 +5,12 @@
 import * as React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { CoinIcon } from "@/components/ui/icons";
+import { CoinIcon, XPIcon } from "@/components/ui/icons";
 import { Plant } from "@/components/plants/Plant";
 import { FLOWERS_V2, FLOWER_ORDER, type FlowerType } from "@/components/plants/flowers-v2";
 import { PLANT_CATALOG } from "@/components/plants/catalog";
+import { DECOR_CATALOG, type DecorEntry } from "@/components/decor/catalog";
+import { DecorSprite } from "@/components/decor/DecorSprite";
 import { HUD } from "@/components/ui/HUD";
 import { PixelPanel } from "@/components/ui/PixelPanel";
 import { PixelButton } from "@/components/ui/PixelButton";
@@ -22,17 +24,27 @@ type Tab = "seeds" | "decor" | "revive";
 export default function ShopScreen() {
   const profile = useGameStore((s) => s.profile);
   const inventory = useGameStore((s) => s.inventory);
+  const decorOwned = useGameStore((s) => s.decorOwned);
   const buyPlant = useGameStore((s) => s.buyPlant);
+  const buyDecor = useGameStore((s) => s.buyDecor);
 
   const palette = PIXEL_PALETTES[profile?.paletteKey ?? "terracotta"];
   const [tab, setTab] = React.useState<Tab>("seeds");
-  const [flash, setFlash] = React.useState<FlowerType | null>(null);
+  const [flash, setFlash] = React.useState<string | null>(null);
 
   const buy = async (t: FlowerType) => {
     const price = PLANT_CATALOG[t].price;
     const result = await buyPlant(t, price);
     if (result) {
       setFlash(t);
+      setTimeout(() => setFlash(null), 600);
+    }
+  };
+
+  const buyDecorItem = async (entry: DecorEntry) => {
+    const result = await buyDecor(entry.id, entry.xp);
+    if (result) {
+      setFlash(entry.id);
       setTimeout(() => setFlash(null), 600);
     }
   };
@@ -189,18 +201,105 @@ export default function ShopScreen() {
         )}
 
         {tab === "decor" && (
-          <PixelPanel palette={palette} pad={20} style={{ alignItems: "center" }}>
-            <Text style={[styles.cs, { color: palette.ink, fontFamily: FONTS.displayBold }]}>
-              COMING SOON
-            </Text>
-            <Text
-              style={[
-                { color: palette.inkSoft, fontFamily: FONTS.body, fontSize: 13, marginTop: 6 },
-              ]}
-            >
-              Pots, paths, trellises, fairy lights.
-            </Text>
-          </PixelPanel>
+          <View style={styles.grid}>
+            {DECOR_CATALOG.map((entry) => {
+              const owned = decorOwned.some((d) => d.id === entry.id);
+              const canBuy = (profile?.xp ?? 0) >= entry.xp;
+              const justBought = flash === entry.id;
+              return (
+                <View
+                  key={entry.id}
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: palette.bgPanel,
+                      borderColor: palette.ink,
+                      transform: [{ translateY: justBought ? -4 : 0 }],
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.cardArt,
+                      {
+                        backgroundColor: palette.bgPanel2,
+                        borderColor: palette.line,
+                      },
+                    ]}
+                  >
+                    <DecorSprite entry={entry} palette={palette} scale={3} />
+                  </View>
+                  <Text
+                    style={[
+                      styles.cardName,
+                      { color: palette.ink, fontFamily: FONTS.displayBold },
+                    ]}
+                  >
+                    {entry.name.toUpperCase()}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.cardDesc,
+                      { color: palette.inkSoft, fontFamily: FONTS.body },
+                    ]}
+                  >
+                    {entry.desc}
+                  </Text>
+                  <View style={styles.cardFooter}>
+                    <View style={styles.priceRow}>
+                      <XPIcon palette={palette} scale={2} />
+                      <Text
+                        style={[
+                          styles.price,
+                          { color: palette.ink, fontFamily: FONTS.displayBold },
+                        ]}
+                      >
+                        {entry.xp}
+                      </Text>
+                    </View>
+                    {owned && !justBought ? (
+                      <View
+                        style={[
+                          styles.ownedTag,
+                          {
+                            backgroundColor: palette.leafX,
+                            borderColor: palette.leafD,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: palette.leafD,
+                            fontFamily: FONTS.body,
+                            fontSize: 11,
+                          }}
+                        >
+                          OWNED
+                        </Text>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => canBuy && buyDecorItem(entry)}
+                        disabled={!canBuy}
+                        style={[
+                          styles.buyBtn,
+                          {
+                            backgroundColor: canBuy ? palette.accentB : palette.line,
+                            borderColor: palette.ink,
+                            opacity: canBuy ? 1 : 0.6,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.buyText, { fontFamily: FONTS.displayBold }]}>
+                          {justBought ? "GOT IT!" : "BUY"}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
         )}
 
         {tab === "revive" && (

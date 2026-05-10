@@ -32,6 +32,7 @@ export default function NewTask() {
     freq: "daily",
     dows: [1, 3, 5],
     reminderTime: "09:00",
+    durationMinutes: 15,
     plant: inventory[0] ?? null,
   });
   const [submitting, setSubmitting] = React.useState(false);
@@ -53,6 +54,7 @@ export default function NewTask() {
         freq: state.freq,
         dows: state.freq === "dow" ? state.dows : [],
         reminderTime: state.reminderTime,
+        durationMinutes: state.durationMinutes,
         plantType: state.plant,
       });
       if (state.reminderTime) {

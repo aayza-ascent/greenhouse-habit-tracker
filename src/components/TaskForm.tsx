@@ -37,12 +37,21 @@ const FREQ_OPTIONS: { id: Frequency; label: string }[] = [
 
 const DOW_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
+const DURATION_OPTIONS: { mins: number; label: string }[] = [
+  { mins: 5, label: "5m" },
+  { mins: 15, label: "15m" },
+  { mins: 30, label: "30m" },
+  { mins: 60, label: "1h" },
+  { mins: 120, label: "2h" },
+];
+
 export type TaskFormState = {
   name: string;
   icon: string;
   freq: Frequency;
   dows: number[];
   reminderTime: string | null; // "HH:MM" or null
+  durationMinutes: number;
   plant: FlowerType | null;
 };
 
@@ -197,6 +206,37 @@ export function TaskForm({
             })}
           </View>
         )}
+      </Field>
+
+      <Field label="DURATION" palette={palette}>
+        <View style={styles.durationRow}>
+          {DURATION_OPTIONS.map((opt) => {
+            const on = state.durationMinutes === opt.mins;
+            return (
+              <Pressable
+                key={opt.mins}
+                onPress={() => onChange({ durationMinutes: opt.mins })}
+                style={[
+                  styles.durationBtn,
+                  {
+                    borderColor: on ? palette.accent : palette.ink,
+                    backgroundColor: on ? palette.bgPanel2 : palette.bgPanel,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: palette.ink,
+                    fontFamily: FONTS.displayBold,
+                    fontSize: 12,
+                  }}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </Field>
 
       {!lockPlant && (
@@ -401,6 +441,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  durationRow: { flexDirection: "row", gap: 6 },
+  durationBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 2,
+    alignItems: "center",
   },
   plantOption: { padding: 6, borderWidth: 2, alignItems: "center" },
   plantName: { fontSize: 11, marginTop: 2 },

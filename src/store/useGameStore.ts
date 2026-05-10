@@ -21,6 +21,7 @@ import * as plantsApi from "@/data/plants";
 import * as profileApi from "@/data/profile";
 import * as tasksApi from "@/data/tasks";
 import * as inventoryApi from "@/data/inventory";
+import * as decorApi from "@/data/decor";
 import { recordTransaction } from "@/data/transactions";
 import type { Plant, Profile, Task } from "@/data/types";
 
@@ -50,6 +51,8 @@ type Celebrate = {
   newStage: number | null;
 };
 
+type DecorRow = { id: string; slotIndex: number | null };
+
 type State = {
   loading: boolean;
   error: string | null;
@@ -58,6 +61,7 @@ type State = {
   tasks: Task[];
   plants: Plant[];
   inventory: FlowerType[];
+  decorOwned: DecorRow[];
 
   celebrate: Celebrate | null;
 
@@ -66,6 +70,7 @@ type State = {
   setTasks: (ts: Task[]) => void;
   setPlants: (ps: Plant[]) => void;
   setInventory: (i: FlowerType[]) => void;
+  setDecorOwned: (d: DecorRow[]) => void;
   upsertTask: (t: Task) => void;
   upsertPlant: (p: Plant) => void;
   removeTask: (id: string) => void;
@@ -84,6 +89,12 @@ type State = {
   /** Unlock a seed type in inventory. Doesn't plant anything in the greenhouse —
    *  the plant row is created only when the user links the type to a task. */
   buyPlant: (plantType: FlowerType, price: number) => Promise<boolean>;
+  /** Unlock a decor item with XP. Returns false if already owned or short on XP. */
+  buyDecor: (decorId: string, xpPrice: number) => Promise<boolean>;
+  /** Place a decor item in a strip slot, or clear its slot when slotIndex is null.
+   *  No-ops silently if the target slot is already taken (server-side index
+   *  rejects with 23505 — we don't surface to user). */
+  placeDecor: (decorId: string, slotIndex: number | null) => Promise<void>;
   revivePlant: (plantId: string) => Promise<void>;
   updateProfilePatch: (patch: Parameters<typeof profileApi.updateProfile>[1]) => Promise<void>;
 };
@@ -95,12 +106,20 @@ export const useGameStore = create<State>((set, get) => ({
   tasks: [],
   plants: [],
   inventory: [],
+  decorOwned: [],
   celebrate: null,
 
   setProfile: (p) => set({ profile: p }),
   setTasks: (ts) => set({ tasks: dedupeById(ts) }),
   setPlants: (ps) => set({ plants: dedupeById(ps) }),
   setInventory: (i) => set({ inventory: Array.from(new Set(i)) }),
+  setDecorOwned: (d) => {
+    // Dedupe by id — older versions of the schema stored duplicates if the
+    // upsert path raced with the realtime echo.
+    const seen = new Map<string, DecorRow>();
+    for (const row of d) seen.set(row.id, row);
+    set({ decorOwned: Array.from(seen.values()) });
+  },
   // Self-healing upserts: filter out any existing rows with this id (which
   // squashes any pre-existing duplicates) and append the new one.
   upsertTask: (t) =>
@@ -374,6 +393,42 @@ export const useGameStore = create<State>((set, get) => ({
       inventory: s.inventory.includes(plantType) ? s.inventory : [...s.inventory, plantType],
     }));
     return true;
+  },
+
+  buyDecor: async (decorId, xpPrice) => {
+    const { profile, decorOwned } = get();
+    if (!profile) throw new Error("No profile loaded.");
+    if (decorOwned.some((d) => d.id === decorId)) return false;
+    if (profile.xp < xpPrice) return false;
+
+    await decorApi.unlockDecor(profile.id, decorId);
+    const updatedProfile = await profileApi.updateProfile(profile.id, {
+      xp: profile.xp - xpPrice,
+    });
+    await recordTransaction(profile.id, {
+      kind: "spend_buy",
+      deltaXp: -xpPrice,
+    });
+    set((s) => ({
+      profile: updatedProfile,
+      decorOwned: s.decorOwned.some((d) => d.id === decorId)
+        ? s.decorOwned
+        : [...s.decorOwned, { id: decorId, slotIndex: null }],
+    }));
+    return true;
+  },
+
+  placeDecor: async (decorId, slotIndex) => {
+    const { profile, decorOwned } = get();
+    if (!profile) return;
+    if (!decorOwned.some((d) => d.id === decorId)) return;
+    const ok = await decorApi.placeDecor(profile.id, decorId, slotIndex);
+    if (!ok) return; // slot already taken; UI no-ops
+    set((s) => ({
+      decorOwned: s.decorOwned.map((d) =>
+        d.id === decorId ? { ...d, slotIndex } : d,
+      ),
+    }));
   },
 
   revivePlant: async (plantId) => {

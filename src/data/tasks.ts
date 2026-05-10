@@ -10,6 +10,7 @@ type DbTask = {
   freq: Frequency;
   dows: number[];
   reminder_time: string | null;
+  duration_minutes: number;
   streak: number;
   last_completed_at: string | null;
   plant_id: string | null;
@@ -25,6 +26,7 @@ const fromDb = (t: DbTask): Task => ({
   freq: t.freq,
   dows: t.dows ?? [],
   reminderTime: t.reminder_time,
+  durationMinutes: t.duration_minutes ?? 15,
   streak: t.streak,
   lastCompletedAt: t.last_completed_at,
   plantId: t.plant_id,
@@ -49,6 +51,7 @@ export type CreateTaskInput = {
   freq: Frequency;
   dows?: number[];
   reminderTime?: string | null;
+  durationMinutes?: number;
   plantId?: string | null;
 };
 
@@ -62,6 +65,7 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
       freq: input.freq,
       dows: input.dows ?? [],
       reminder_time: input.reminderTime ?? null,
+      duration_minutes: input.durationMinutes ?? 15,
       plant_id: input.plantId ?? null,
     })
     .select("*")
@@ -78,6 +82,7 @@ export async function updateTask(
     freq: Frequency;
     dows: number[];
     reminderTime: string | null;
+    durationMinutes: number;
     streak: number;
     lastCompletedAt: string | null;
     plantId: string | null;
@@ -90,6 +95,7 @@ export async function updateTask(
   if (patch.freq !== undefined) dbPatch.freq = patch.freq;
   if (patch.dows !== undefined) dbPatch.dows = patch.dows;
   if (patch.reminderTime !== undefined) dbPatch.reminder_time = patch.reminderTime;
+  if (patch.durationMinutes !== undefined) dbPatch.duration_minutes = patch.durationMinutes;
   if (patch.streak !== undefined) dbPatch.streak = patch.streak;
   if (patch.lastCompletedAt !== undefined) dbPatch.last_completed_at = patch.lastCompletedAt;
   if (patch.plantId !== undefined) dbPatch.plant_id = patch.plantId;
