@@ -41,6 +41,16 @@ The original design handoff under `greenhouse-prototype-design/` is **reference-
 - `@/*` → `src/*` (e.g. `@/theme/palettes`)
 - `~/*` → repo root
 
+## Expo Go vs dev build
+
+Expo Go is fine for everyday UI work, but two pieces won't fully run there:
+- **Remote push** (`expo-notifications` `getExpoPushTokenAsync`) — removed from Expo Go in SDK 53. `src/notifications/registerPushToken.ts` early-returns when `Constants.appOwnership === "expo"`, so the app doesn't crash, you just don't get a push token. Local task reminders (scheduled via `scheduleForTask`) still work in Expo Go on iOS.
+- **Apple Sign-In** — needs the *Sign in with Apple* entitlement on the dev profile, which Expo Go can't ship. Email/password signup is the testable path inside Expo Go.
+
+For both, use a **development build** (`npx expo run:ios` or `eas build --profile development`).
+
+The dev-only Reanimated "reduced motion" warning and Expo Go's `expo-notifications` warnings are silenced in `src/dev/silenceWarnings.ts` (imported once at the top of `app/_layout.tsx`). Real errors still surface.
+
 ## Environment setup
 
 `.env` (gitignored) needs:

@@ -127,3 +127,43 @@ export async function recordCompletion(
   });
   if (error) throw error;
 }
+
+// Returns the most recent completion row for a task, or null if there is
+// none. Used by uncompleteTask to know what payouts to reverse.
+export async function fetchLatestCompletion(
+  taskId: string,
+): Promise<{ id: string; coins_earned: number; xp_earned: number; completed_at: string } | null> {
+  const { data, error } = await supabase
+    .from("task_completions")
+    .select("id, coins_earned, xp_earned, completed_at")
+    .eq("task_id", taskId)
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export async function deleteCompletionById(id: string): Promise<void> {
+  const { error } = await supabase.from("task_completions").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Returns the second-most-recent completion's timestamp (for back-filling
+// task.last_completed_at after we delete the latest). Returns null when the
+// task has no remaining completions.
+export async function fetchPriorCompletionTime(
+  taskId: string,
+  excludeId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("task_completions")
+    .select("completed_at")
+    .eq("task_id", taskId)
+    .neq("id", excludeId)
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.completed_at ?? null;
+}

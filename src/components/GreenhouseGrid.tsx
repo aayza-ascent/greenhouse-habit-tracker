@@ -2,28 +2,36 @@
 // + dragging moves it to another slot (swapping with whatever's there).
 // A short tap surfaces the plant info modal.
 //
+// Slot dimensions are passed in by the parent (greenhouse.tsx derives them
+// from `useWindowDimensions` so 8×5 doesn't overflow narrow phones).
+// Slot proportions stay 50:64 — shrinks the whole sprite uniformly.
+//
 // Uses react-native-gesture-handler's Gesture API with .runOnJS(true) so
 // callbacks can use plain React state. Performance is fine for the small
 // number of plants involved (≤48 in the 8x6 max grid).
 
 import * as React from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { Plant } from "@/components/plants/Plant";
 import type { Plant as PlantRow } from "@/data/types";
 import { FONTS } from "@/theme/fonts";
 import type { Palette } from "@/theme/palettes";
-import { Pressable, Text } from "react-native";
 
-const SLOT_W = 50;
-const SLOT_H = 64;
+// Aspect ratio matches the prototype's pixel grid (50:64 → 28:38 sprite).
+export const SLOT_BASE_W = 50;
+export const SLOT_BASE_H = 64;
 
 type Props = {
   palette: Palette;
   plants: PlantRow[];
   cols: number;
   rows: number;
+  slotW: number;
+  slotH: number;
+  /** Sprite scale relative to flowers-v2's 28-px-wide canvas. */
+  plantScale: number;
   onTapPlant: (plant: PlantRow) => void;
   onMovePlant: (plantId: string, col: number, row: number) => void;
   onTapEmpty?: () => void;
@@ -34,6 +42,9 @@ export function GreenhouseGrid({
   plants,
   cols,
   rows,
+  slotW,
+  slotH,
+  plantScale,
   onTapPlant,
   onMovePlant,
   onTapEmpty,
@@ -47,12 +58,11 @@ export function GreenhouseGrid({
     [plants],
   );
 
-  const containerW = cols * SLOT_W;
-  const containerH = rows * SLOT_H;
+  const containerW = cols * slotW;
+  const containerH = rows * slotH;
 
   return (
     <View style={[styles.container, { width: containerW, height: containerH }]}>
-      {/* Slot tiles — borders + hover highlight */}
       {Array.from({ length: rows * cols }).map((_, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
@@ -65,10 +75,10 @@ export function GreenhouseGrid({
             style={[
               styles.slot,
               {
-                left: col * SLOT_W,
-                top: row * SLOT_H,
-                width: SLOT_W - 2,
-                height: SLOT_H - 2,
+                left: col * slotW,
+                top: row * slotH,
+                width: slotW - 2,
+                height: slotH - 2,
                 borderColor: empty ? palette.line + "80" : "transparent",
                 backgroundColor: isHover
                   ? palette.coin + "55"
@@ -81,7 +91,7 @@ export function GreenhouseGrid({
             {empty && (
               <Text
                 style={{
-                  fontSize: 18,
+                  fontSize: Math.round(slotW * 0.36),
                   color: palette.line,
                   opacity: 0.5,
                   fontFamily: FONTS.displayBold,
@@ -94,12 +104,14 @@ export function GreenhouseGrid({
         );
       })}
 
-      {/* Plants — bottom-anchored to slot, with a tap+drag gesture each */}
       {plants.map((p) => (
         <DraggablePlant
           key={p.id}
           plant={p}
           palette={palette}
+          slotW={slotW}
+          slotH={slotH}
+          plantScale={plantScale}
           dragging={dragId === p.id}
           dragOffset={dragId === p.id ? dragOffset : { x: 0, y: 0 }}
           renderSlot={
@@ -114,19 +126,10 @@ export function GreenhouseGrid({
           }}
           onUpdate={(dx, dy) => {
             setDragOffset({ x: dx, y: dy });
-            // Compute hover slot based on plant's start position + delta.
-            const baseX = p.slotCol * SLOT_W + SLOT_W / 2;
-            const baseY = p.slotRow * SLOT_H + SLOT_H;
-            const targetCol = clamp(
-              Math.floor((baseX + dx) / SLOT_W),
-              0,
-              cols - 1,
-            );
-            const targetRow = clamp(
-              Math.floor((baseY + dy) / SLOT_H),
-              0,
-              rows - 1,
-            );
+            const baseX = p.slotCol * slotW + slotW / 2;
+            const baseY = p.slotRow * slotH + slotH;
+            const targetCol = clamp(Math.floor((baseX + dx) / slotW), 0, cols - 1);
+            const targetRow = clamp(Math.floor((baseY + dy) / slotH), 0, rows - 1);
             setHoverSlot({ col: targetCol, row: targetRow });
           }}
           onEnd={(dx, dy) => {
@@ -139,10 +142,7 @@ export function GreenhouseGrid({
             }
             const target = hoverSlot;
             setHoverSlot(null);
-            if (
-              target &&
-              (target.col !== p.slotCol || target.row !== p.slotRow)
-            ) {
+            if (target && (target.col !== p.slotCol || target.row !== p.slotRow)) {
               onMovePlant(p.id, target.col, target.row);
             }
           }}
@@ -155,6 +155,9 @@ export function GreenhouseGrid({
 function DraggablePlant({
   plant,
   palette,
+  slotW,
+  slotH,
+  plantScale,
   dragging,
   dragOffset,
   renderSlot,
@@ -164,6 +167,9 @@ function DraggablePlant({
 }: {
   plant: PlantRow;
   palette: Palette;
+  slotW: number;
+  slotH: number;
+  plantScale: number;
   dragging: boolean;
   dragOffset: { x: number; y: number };
   renderSlot: { col: number; row: number };
@@ -180,7 +186,6 @@ function DraggablePlant({
         .onUpdate((e) => onUpdate(e.translationX, e.translationY))
         .onEnd((e) => onEnd(e.translationX, e.translationY))
         .onFinalize((e) => {
-          // Tap (no drag) → ensure onEnd still fires.
           if (Math.abs(e.translationX) < 1 && Math.abs(e.translationY) < 1) {
             onEnd(e.translationX, e.translationY);
           }
@@ -188,12 +193,8 @@ function DraggablePlant({
     [onStart, onUpdate, onEnd],
   );
 
-  // When dragging, use the live drag offset for visuals. When not dragging,
-  // anchor to the current slot.
-  const left =
-    renderSlot.col * SLOT_W + SLOT_W / 2 + (dragging ? dragOffset.x : 0);
-  const top =
-    renderSlot.row * SLOT_H + SLOT_H + (dragging ? dragOffset.y : 0);
+  const left = renderSlot.col * slotW + slotW / 2 + (dragging ? dragOffset.x : 0);
+  const top = renderSlot.row * slotH + slotH + (dragging ? dragOffset.y : 0);
 
   const healthColor =
     plant.health > 70 ? palette.leafL : plant.health > 49 ? palette.coin : palette.accent;
@@ -204,11 +205,13 @@ function DraggablePlant({
         style={[
           styles.plantWrap,
           {
+            width: slotW,
+            height: slotH,
             left,
             top,
             transform: [
-              { translateX: -SLOT_W / 2 },
-              { translateY: -SLOT_H },
+              { translateX: -slotW / 2 },
+              { translateY: -slotH },
               { scale: dragging ? 1.15 : 1 },
             ],
             zIndex: dragging ? 10 : 1,
@@ -218,7 +221,7 @@ function DraggablePlant({
         <View
           style={[
             styles.healthPip,
-            { backgroundColor: palette.ink + "44" },
+            { backgroundColor: palette.ink + "44", width: Math.round(slotW * 0.5) },
           ]}
         >
           <View
@@ -229,7 +232,7 @@ function DraggablePlant({
             }}
           />
         </View>
-        <Plant type={plant.type} stage={plant.stageIdx} scale={3} />
+        <Plant type={plant.type} stage={plant.stageIdx} scale={plantScale} />
       </View>
     </GestureDetector>
   );
@@ -250,15 +253,12 @@ const styles = StyleSheet.create({
   },
   plantWrap: {
     position: "absolute",
-    width: SLOT_W,
-    height: SLOT_H,
     alignItems: "center",
     justifyContent: "flex-end",
   },
   healthPip: {
     position: "absolute",
     top: -4,
-    width: 24,
     height: 4,
     overflow: "hidden",
   },

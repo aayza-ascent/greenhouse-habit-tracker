@@ -7,13 +7,19 @@
 import * as React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { Plant } from "@/components/plants/Plant";
+import { FLOWERS_V2 } from "@/components/plants/flowers-v2";
 import { PixelButton } from "@/components/ui/PixelButton";
 import { devSkipADay } from "@/data/cron";
 import { supabase } from "@/data/supabase";
+import { STAGE_NAMES } from "@/domain/health";
 import { useGameStore } from "@/store/useGameStore";
 import { FONTS } from "@/theme/fonts";
 import { PIXEL_PALETTES, type PaletteKey } from "@/theme/palettes";
 import type { TimeOfDay } from "@/data/types";
+
+const DEV_COIN_GRANT = 100;
+const DEV_XP_GRANT = 100;
 
 const PALETTES: PaletteKey[] = ["terracotta", "twilight", "pastel"];
 const TIMES: TimeOfDay[] = ["day", "dusk", "night"];
@@ -26,6 +32,8 @@ const GRID_OPTS = [
 
 export default function ProfileScreen() {
   const profile = useGameStore((s) => s.profile);
+  const plants = useGameStore((s) => s.plants);
+  const tasks = useGameStore((s) => s.tasks);
   const updateProfilePatch = useGameStore((s) => s.updateProfilePatch);
   const palette = PIXEL_PALETTES[profile?.paletteKey ?? "terracotta"];
 
@@ -168,17 +176,107 @@ export default function ProfileScreen() {
 
       {__DEV__ && profile && (
         <Section title="DEV" palette={palette}>
-          <View style={{ padding: 12 }}>
+          <View style={styles.devGrants}>
             <PixelButton
               palette={palette}
               color={palette.coin}
               fg={palette.ink}
+              size="sm"
+              style={{ flex: 1 }}
+              onPress={() =>
+                updateProfilePatch({ coins: profile.coins + DEV_COIN_GRANT })
+              }
+            >
+              {`+ ${DEV_COIN_GRANT} 🪙`}
+            </PixelButton>
+            <PixelButton
+              palette={palette}
+              color={palette.accentB}
+              fg={palette.ink}
+              size="sm"
+              style={{ flex: 1 }}
+              onPress={() =>
+                updateProfilePatch({ xp: profile.xp + DEV_XP_GRANT })
+              }
+            >
+              {`+ ${DEV_XP_GRANT} XP`}
+            </PixelButton>
+          </View>
+          <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+            <PixelButton
+              palette={palette}
+              color={palette.line}
               size="sm"
               onPress={() => devSkipADay(profile.id)}
             >
               SKIP A DAY (DECAY NOW)
             </PixelButton>
           </View>
+
+          {/* Plant progress inspector — every plant in the greenhouse, sorted
+              by stage so newly-sprouted ones surface first. Useful for
+              eyeballing whether the stage banding fires correctly without
+              having to drag-tap each tile in the greenhouse view. */}
+          {plants.length > 0 && (
+            <View style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+              <Text
+                style={[
+                  styles.devPlantsHeader,
+                  { color: palette.inkSoft, fontFamily: FONTS.displayBold },
+                ]}
+              >
+                PLANT PROGRESS · {plants.length}
+              </Text>
+              {plants
+                .slice()
+                .sort((a, b) => a.stageIdx - b.stageIdx)
+                .map((p) => {
+                  const linkedTask = tasks.find((t) => t.id === p.taskId);
+                  return (
+                    <View
+                      key={p.id}
+                      style={[
+                        styles.devPlantRow,
+                        { backgroundColor: palette.bgPanel, borderColor: palette.line },
+                      ]}
+                    >
+                      <Plant type={p.type} stage={p.stageIdx} scale={1.5} />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text
+                          style={[
+                            styles.devPlantName,
+                            { color: palette.ink, fontFamily: FONTS.bodySemibold },
+                          ]}
+                        >
+                          {FLOWERS_V2[p.type].name}{" "}
+                          <Text style={{ color: palette.inkSoft, fontFamily: FONTS.body }}>
+                            · {STAGE_NAMES[p.stageIdx] ?? "?"}
+                          </Text>
+                        </Text>
+                        <Text
+                          style={[
+                            styles.devPlantMeta,
+                            { color: palette.inkSoft, fontFamily: FONTS.body },
+                          ]}
+                        >
+                          health {p.health} · stage {p.stageIdx} · ticks@full {p.ticksAtFull}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.devPlantMeta,
+                            { color: palette.inkSoft, fontFamily: FONTS.body },
+                          ]}
+                        >
+                          {linkedTask
+                            ? `🔥 ${linkedTask.streak}d · ${linkedTask.icon} ${linkedTask.name}`
+                            : "no linked task"}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+            </View>
+          )}
         </Section>
       )}
 
@@ -306,4 +404,22 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderWidth: 2,
   },
+  devGrants: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  devPlantsHeader: { fontSize: 10, letterSpacing: 1, marginTop: 8, marginBottom: 6 },
+  devPlantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderStyle: "dashed",
+  },
+  devPlantName: { fontSize: 13 },
+  devPlantMeta: { fontSize: 11, marginTop: 2 },
 });

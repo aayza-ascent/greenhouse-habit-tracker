@@ -1,7 +1,8 @@
-// Three-step onboarding: welcome → pick first seed → name first task. On
-// finish: gifts the three starter species in inventory_owned, plants the
-// chosen seed in slot (0,0), creates a daily task linked to it, sets
-// profiles.onboarded = true, and navigates to /(tabs)/greenhouse.
+// Three-step onboarding: welcome → pick first seed → set up first task
+// (full new-task form: name, icon, frequency, day-of-week, reminder time).
+// On finish: gifts the three starter species in inventory_owned, plants the
+// chosen seed, creates the first task linked to it, sets profiles.onboarded,
+// and navigates to /(tabs)/greenhouse.
 
 import * as React from "react";
 import {
@@ -11,7 +12,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -21,13 +21,12 @@ import { Plant } from "@/components/plants/Plant";
 import { FLOWERS_V2, type FlowerType } from "@/components/plants/flowers-v2";
 import { PLANT_CATALOG, STARTER_TYPES } from "@/components/plants/catalog";
 import { PixelButton } from "@/components/ui/PixelButton";
-import { PixelPanel } from "@/components/ui/PixelPanel";
+import { TaskForm, type TaskFormState } from "@/components/TaskForm";
 import { unlockPlant } from "@/data/inventory";
 import { useGameStore } from "@/store/useGameStore";
+import { ensurePermission, scheduleForTask } from "@/notifications/schedule";
 import { FONTS } from "@/theme/fonts";
 import { PIXEL_PALETTES } from "@/theme/palettes";
-
-const TASK_ICONS = ["💧", "📚", "🏃", "🧘", "✍️", "🥗"];
 
 export default function Onboarding() {
   const router = useRouter();
@@ -40,12 +39,26 @@ export default function Onboarding() {
 
   const [step, setStep] = React.useState(0);
   const [picked, setPicked] = React.useState<FlowerType>(STARTER_TYPES[0] ?? "tulip");
-  const [taskName, setTaskName] = React.useState("Drink 8 cups of water");
-  const [taskIcon, setTaskIcon] = React.useState(TASK_ICONS[0]);
+  const [formState, setFormState] = React.useState<TaskFormState>({
+    name: "Drink 8 cups of water",
+    icon: "💧",
+    freq: "daily",
+    dows: [1, 3, 5],
+    reminderTime: "09:00",
+    plant: STARTER_TYPES[0] ?? "tulip",
+  });
   const [submitting, setSubmitting] = React.useState(false);
+
+  // Keep TaskForm's plant in sync with the seed picked in step 1 — even
+  // though the form's plant picker is locked, the preview/Plant references
+  // need to match the current selection.
+  React.useEffect(() => {
+    setFormState((s) => ({ ...s, plant: picked }));
+  }, [picked]);
 
   const finish = async () => {
     if (!profile) return;
+    if (!formState.name.trim()) return;
     setSubmitting(true);
     try {
       // Gift all starter species so future task-creation has variety.
@@ -54,14 +67,19 @@ export default function Onboarding() {
       }
       setInventory(STARTER_TYPES);
 
-      // Create first task + plant the chosen seed.
-      await addTask({
-        name: taskName.trim() || "Daily habit",
-        icon: taskIcon,
-        freq: "daily",
-        reminderTime: "09:00",
+      // Create first task + plant the chosen seed in the greenhouse.
+      const task = await addTask({
+        name: formState.name.trim(),
+        icon: formState.icon,
+        freq: formState.freq,
+        dows: formState.freq === "dow" ? formState.dows : [],
+        reminderTime: formState.reminderTime,
         plantType: picked,
       });
+      if (formState.reminderTime) {
+        const ok = await ensurePermission();
+        if (ok) await scheduleForTask(task);
+      }
 
       // Mark onboarded — root layout will route into tabs on next render.
       await updateProfilePatch({ onboarded: true });
@@ -73,21 +91,24 @@ export default function Onboarding() {
     }
   };
 
+  const heroHeight = step === 2 ? 140 : 200;
+  const heroPlantStage = step === 0 ? 1 : 4;
+
   return (
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: palette.bgPanel }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={styles.heroBand}>
-        <GreenhouseSky palette={palette} time="day" height={180} />
+      <View style={[styles.heroBand, { height: heroHeight }]}>
+        <GreenhouseSky palette={palette} time="day" height={heroHeight} />
         <View
           style={[
             styles.floor,
             { backgroundColor: palette.bgFloor, borderTopColor: palette.line },
           ]}
         />
-        <View style={styles.heroPlant}>
-          <Plant type={picked} stage={step === 0 ? 1 : 4} scale={5} />
+        <View style={[styles.heroPlant, { bottom: step === 2 ? 22 : 30 }]}>
+          <Plant type={picked} stage={heroPlantStage} scale={step === 2 ? 4 : 5} />
         </View>
       </View>
 
@@ -151,48 +172,17 @@ export default function Onboarding() {
             <Step
               palette={palette}
               title={"Your first task"}
-              body={"Pick something small.\nDo it daily."}
+              body={"Pick something small.\nWe'll remind you."}
             />
-            <PixelPanel palette={palette} pad={14} style={{ marginTop: 14 }}>
-              <Text
-                style={[styles.fieldLabel, { color: palette.inkSoft, fontFamily: FONTS.displayBold }]}
-              >
-                NAME
-              </Text>
-              <TextInput
-                value={taskName}
-                onChangeText={setTaskName}
-                style={[
-                  styles.input,
-                  { borderColor: palette.ink, color: palette.ink, fontFamily: FONTS.body },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.fieldLabel,
-                  { color: palette.inkSoft, fontFamily: FONTS.displayBold, marginTop: 12 },
-                ]}
-              >
-                ICON
-              </Text>
-              <View style={styles.iconRow}>
-                {TASK_ICONS.map((ic) => (
-                  <Pressable
-                    key={ic}
-                    onPress={() => setTaskIcon(ic)}
-                    style={[
-                      styles.iconBtn,
-                      {
-                        borderColor: ic === taskIcon ? palette.accent : palette.ink,
-                        backgroundColor: ic === taskIcon ? palette.bgPanel2 : palette.bgPanel,
-                      },
-                    ]}
-                  >
-                    <Text style={{ fontSize: 20 }}>{ic}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </PixelPanel>
+            <TaskForm
+              palette={palette}
+              ownedPlants={[picked]}
+              state={formState}
+              onChange={(patch) => setFormState((s) => ({ ...s, ...patch }))}
+              lockPlant
+              hidePreview
+              flat
+            />
           </View>
         )}
 
@@ -214,7 +204,7 @@ export default function Onboarding() {
         <PixelButton
           palette={palette}
           onPress={() => (step < 2 ? setStep(step + 1) : finish())}
-          disabled={submitting}
+          disabled={submitting || (step === 2 && !formState.name.trim())}
         >
           {step < 2 ? "NEXT" : submitting ? "PLANTING…" : "LET'S GROW →"}
         </PixelButton>
@@ -250,9 +240,9 @@ function getPalette() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  heroBand: { height: 200, position: "relative", overflow: "hidden" },
+  heroBand: { position: "relative", overflow: "hidden" },
   floor: { position: "absolute", left: 0, right: 0, bottom: 0, height: 50, borderTopWidth: 3 },
-  heroPlant: { position: "absolute", bottom: 30, left: "50%", marginLeft: -70 },
+  heroPlant: { position: "absolute", left: "50%", marginLeft: -56 },
   scroll: { padding: 24, paddingBottom: 48 },
   stepTitle: { fontSize: 26, lineHeight: 32, marginBottom: 8 },
   stepBody: { fontSize: 16, lineHeight: 22 },
@@ -260,22 +250,6 @@ const styles = StyleSheet.create({
   seedCard: { flex: 1, padding: 8, borderWidth: 2, alignItems: "center" },
   seedName: { fontSize: 12, marginTop: 4 },
   seedDesc: { fontSize: 10, marginTop: 2, textAlign: "center" },
-  fieldLabel: { fontSize: 11, letterSpacing: 1 },
-  input: {
-    borderWidth: 2,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    marginTop: 6,
-  },
-  iconRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   dots: {
     flexDirection: "row",
     justifyContent: "center",

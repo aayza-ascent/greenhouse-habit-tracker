@@ -1,3 +1,5 @@
+import "@/dev/silenceWarnings"; // must precede react-native-reanimated import
+
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
@@ -75,6 +77,10 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen
           name="new-task"
+          options={{ presentation: "modal", animation: "slide_from_bottom" }}
+        />
+        <Stack.Screen
+          name="edit-task"
           options={{ presentation: "modal", animation: "slide_from_bottom" }}
         />
         <Stack.Screen name="dev/plant-reference" />

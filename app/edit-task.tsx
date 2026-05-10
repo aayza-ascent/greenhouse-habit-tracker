@@ -1,4 +1,9 @@
-// New Task creation modal — wraps the shared <TaskForm> with header + save.
+// Edit Task modal. Reuses the shared <TaskForm>; pre-fills from store.
+// Reminders: cancels any previously scheduled local notifications and
+// re-schedules from the new state.
+//
+// Plant link is locked at create time — reassigning a plant mid-life would
+// break stage-derivation continuity. Delete + recreate if you need to swap.
 
 import * as React from "react";
 import {
@@ -9,59 +14,65 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { PixelButton } from "@/components/ui/PixelButton";
 import { TaskForm, type TaskFormState } from "@/components/TaskForm";
 import { useGameStore } from "@/store/useGameStore";
+import { updateTask as updateTaskApi } from "@/data/tasks";
 import { ensurePermission, scheduleForTask } from "@/notifications/schedule";
 import { FONTS } from "@/theme/fonts";
 import { PIXEL_PALETTES } from "@/theme/palettes";
 
-export default function NewTask() {
+export default function EditTask() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+
   const profile = useGameStore((s) => s.profile);
   const inventory = useGameStore((s) => s.inventory);
-  const addTask = useGameStore((s) => s.addTask);
+  const tasks = useGameStore((s) => s.tasks);
+  const upsertTask = useGameStore((s) => s.upsertTask);
 
   const palette = PIXEL_PALETTES[profile?.paletteKey ?? "terracotta"];
+  const task = tasks.find((t) => t.id === id);
 
-  const [state, setState] = React.useState<TaskFormState>({
-    name: "",
-    icon: "🌱",
-    freq: "daily",
-    dows: [1, 3, 5],
-    reminderTime: "09:00",
-    plant: inventory[0] ?? null,
-  });
+  const [state, setState] = React.useState<TaskFormState>(() => ({
+    name: task?.name ?? "",
+    icon: task?.icon ?? "🌱",
+    freq: task?.freq ?? "daily",
+    dows: task?.dows ?? [],
+    reminderTime: task?.reminderTime ?? null,
+    plant: null, // hidden in edit mode
+  }));
   const [submitting, setSubmitting] = React.useState(false);
 
-  // Default plant once inventory hydrates.
-  React.useEffect(() => {
-    if (!state.plant && inventory.length > 0) {
-      setState((s) => ({ ...s, plant: inventory[0] }));
-    }
-  }, [inventory.length]);
+  if (!task) {
+    return (
+      <View style={[styles.root, { backgroundColor: palette.bgPanel, padding: 32 }]}>
+        <Text style={{ color: palette.ink, fontFamily: FONTS.body }}>Task not found.</Text>
+      </View>
+    );
+  }
 
   const onSave = async () => {
     if (!state.name.trim()) return;
     setSubmitting(true);
     try {
-      const task = await addTask({
+      const updated = await updateTaskApi(task.id, {
         name: state.name.trim(),
         icon: state.icon,
         freq: state.freq,
         dows: state.freq === "dow" ? state.dows : [],
         reminderTime: state.reminderTime,
-        plantType: state.plant,
       });
-      if (state.reminderTime) {
+      upsertTask(updated);
+      if (updated.reminderTime) {
         const ok = await ensurePermission();
-        if (ok) await scheduleForTask(task);
+        if (ok) await scheduleForTask(updated);
       }
       router.back();
     } catch (e) {
-      console.warn("[new-task] save failed", e);
+      console.warn("[edit-task] save failed", e);
     } finally {
       setSubmitting(false);
     }
@@ -79,7 +90,7 @@ export default function NewTask() {
           </Text>
         </Pressable>
         <Text style={[styles.title, { fontFamily: FONTS.displayBold, color: palette.ink }]}>
-          NEW TASK
+          EDIT TASK
         </Text>
         <View style={{ width: 60 }} />
       </View>
@@ -89,6 +100,7 @@ export default function NewTask() {
         ownedPlants={inventory}
         state={state}
         onChange={(patch) => setState((s) => ({ ...s, ...patch }))}
+        lockPlant
       />
 
       <View
@@ -102,7 +114,7 @@ export default function NewTask() {
           onPress={onSave}
           disabled={!state.name.trim() || submitting}
         >
-          {submitting ? "PLANTING…" : "PLANT IT 🌱"}
+          {submitting ? "SAVING…" : "SAVE"}
         </PixelButton>
       </View>
     </KeyboardAvoidingView>

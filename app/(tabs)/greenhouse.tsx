@@ -4,10 +4,14 @@
 // Ported from greenhouse-prototype-design/project/screens.jsx → GreenhouseScreen.
 
 import * as React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { GreenhouseGrid } from "@/components/GreenhouseGrid";
+import {
+  GreenhouseGrid,
+  SLOT_BASE_H,
+  SLOT_BASE_W,
+} from "@/components/GreenhouseGrid";
 import { GreenhouseSky } from "@/components/GreenhouseSky";
 import { HUD } from "@/components/ui/HUD";
 import { PlantInfoModal } from "@/components/PlantInfoModal";
@@ -17,8 +21,19 @@ import { FONTS } from "@/theme/fonts";
 import { PIXEL_PALETTES } from "@/theme/palettes";
 import type { Plant as PlantRow } from "@/data/types";
 
+const SCREEN_PADDING = 28; // 14 each side
+
+// Sprite is 28 px wide; SLOT_BASE_W is 50; default scale was 3 (84 px wide,
+// scaled inside a 50-wide slot via centering). When we shrink the slot, we
+// scale the sprite proportionally to keep visuals balanced.
+function spriteScaleForSlot(slotW: number): number {
+  const ratio = slotW / SLOT_BASE_W;
+  return Math.max(1.5, Math.round(ratio * 3 * 2) / 2);
+}
+
 export default function GreenhouseScreen() {
   const router = useRouter();
+  const { width: screenW } = useWindowDimensions();
   const profile = useGameStore((s) => s.profile);
   const plants = useGameStore((s) => s.plants);
   const tasks = useGameStore((s) => s.tasks);
@@ -29,6 +44,12 @@ export default function GreenhouseScreen() {
   const time = profile?.timeOfDay ?? "day";
   const cols = profile?.gridCols ?? 6;
   const rows = profile?.gridRows ?? 6;
+
+  // Fit the grid to the screen. Cap at the prototype's 50×64 so 4×3 doesn't
+  // look comically large on a tablet.
+  const slotW = Math.min(SLOT_BASE_W, Math.floor((screenW - SCREEN_PADDING) / cols));
+  const slotH = Math.round(slotW * (SLOT_BASE_H / SLOT_BASE_W));
+  const plantScale = spriteScaleForSlot(slotW);
 
   const [tip, setTip] = React.useState<PlantRow | null>(null);
   const linkedTask = tip ? tasks.find((t) => t.id === tip.taskId) ?? null : null;
@@ -74,9 +95,12 @@ export default function GreenhouseScreen() {
             plants={plants}
             cols={cols}
             rows={rows}
+            slotW={slotW}
+            slotH={slotH}
+            plantScale={plantScale}
             onTapPlant={setTip}
             onMovePlant={movePlant}
-            onTapEmpty={() => router.push("/(tabs)/shop")}
+            onTapEmpty={() => router.push("/new-task")}
           />
         </View>
       </View>

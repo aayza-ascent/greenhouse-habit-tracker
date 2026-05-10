@@ -96,6 +96,15 @@ export async function updatePlant(
   return fromDb(data as DbPlant);
 }
 
+export async function deletePlant(plantId: string): Promise<void> {
+  // Hard delete — task_completions FK on plants doesn't exist (only the
+  // reverse is set up), so removing a plant is safe. The opposite-direction
+  // FK on tasks.plant_id is `on delete set null`, so any other tasks still
+  // referencing this plant are quietly unlinked.
+  const { error } = await supabase.from("plants").delete().eq("id", plantId);
+  if (error) throw error;
+}
+
 // Atomic swap when dragging onto an occupied slot. We update both rows in
 // quick succession; a server-side function would be safer but RLS-scoped
 // per-row updates are good enough for v1's single-user-per-greenhouse model.

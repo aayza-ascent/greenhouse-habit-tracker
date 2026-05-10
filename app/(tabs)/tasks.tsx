@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,7 +36,36 @@ export default function TasksScreen() {
   const plants = useGameStore((s) => s.plants);
   const completeTask = useGameStore((s) => s.completeTask);
   const uncompleteTask = useGameStore((s) => s.uncompleteTask);
+  const deleteTask = useGameStore((s) => s.deleteTask);
   const router = useRouter();
+
+  const onLongPressTask = (task: Task) => {
+    Alert.alert(task.name, undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Edit",
+        onPress: () => router.push({ pathname: "/edit-task", params: { id: task.id } }),
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () =>
+          Alert.alert(
+            `Delete "${task.name}"?`,
+            "The linked plant will be removed from your greenhouse. Your past completions stay in your stats.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () =>
+                  deleteTask(task.id).catch((e) => console.warn("[delete-task]", e)),
+              },
+            ],
+          ),
+      },
+    ]);
+  };
 
   const palette = PIXEL_PALETTES[profile?.paletteKey ?? "terracotta"];
   const tz = profile?.tz ?? "UTC";
@@ -115,6 +145,16 @@ export default function TasksScreen() {
             </Text>
           </View>
         )}
+        {tasks.length > 0 && (
+          <Text
+            style={[
+              styles.hint,
+              { color: palette.inkSoft, fontFamily: FONTS.body },
+            ]}
+          >
+            Long-press a task to edit or delete it.
+          </Text>
+        )}
         {groups.map((g) => (
           <View key={g.id} style={{ paddingHorizontal: 14 }}>
             <Text
@@ -129,8 +169,10 @@ export default function TasksScreen() {
               const linked = plants.find((p) => p.id === task.plantId);
               const done = isCompletedToday(task, tz);
               return (
-                <View
+                <Pressable
                   key={task.id}
+                  onLongPress={() => onLongPressTask(task)}
+                  delayLongPress={500}
                   style={[
                     styles.taskRow,
                     {
@@ -183,7 +225,7 @@ export default function TasksScreen() {
                       <Plant type={linked.type} stage={linked.stageIdx} scale={2} />
                     </View>
                   )}
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -230,6 +272,14 @@ const styles = StyleSheet.create({
   },
   empty: { padding: 32, alignItems: "center" },
   emptyText: { fontSize: 14 },
+  hint: {
+    fontSize: 11,
+    textAlign: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+    paddingHorizontal: 14,
+    fontStyle: "italic",
+  },
   groupLabel: { fontSize: 11, letterSpacing: 1, paddingTop: 16, paddingBottom: 6 },
   taskRow: {
     flexDirection: "row",
